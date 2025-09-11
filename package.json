@@ -1,0 +1,14 @@
+{
+    "name": "microservicios-backend",
+    "version": "1.0.0",
+    "description": "Backend con microservicios en Node.js (Inventarios, Ordenes, Gateway)",
+    "private": true,
+    "scripts": {
+      "dev": "docker-compose up --build",
+      "prod": "docker-compose -f docker-compose.yml up --build -d",
+      "stop": "docker-compose down",
+      "logs": "docker-compose logs -f",
+      "ps": "docker-compose ps"
+    }
+  }
+  

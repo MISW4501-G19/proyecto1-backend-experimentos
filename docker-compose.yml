@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    depends_on:
+      - inventarios
+      - ordenes
+    networks:
+      - backend
+
+  inventarios:
+    build:
+      context: ./inventarios
+      dockerfile: Dockerfile
+    ports:
+      - "4001:4001"
+    networks:
+      - backend
+
+  ordenes:
+    build:
+      context: ./ordenes
+      dockerfile: Dockerfile
+    ports:
+      - "4002:4002"
+    depends_on:
+      - inventarios
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

@@ -1,0 +1,21 @@
+{
+    "name": "ordenes",
+    "version": "1.0.0",
+    "description": "Microservicio de órdenes de compra",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+      "start": "node index.js",
+      "dev": "nodemon index.js"
+    },
+    "dependencies": {
+      "express": "^4.19.2",
+      "sequelize": "^6.37.3",
+      "sqlite3": "^5.1.7",
+      "node-fetch": "^3.3.2"
+    },
+    "devDependencies": {
+      "nodemon": "^3.1.0"
+    }
+  }
+  
