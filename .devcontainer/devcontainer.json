@@ -1,0 +1,17 @@
+{
+    "name": "Microservicios Backend",
+    "dockerFile": "Dockerfile",
+    "postCreateCommand": "npm install",
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "dbaeumer.vscode-eslint",
+          "ms-azuretools.vscode-docker",
+          "esbenp.prettier-vscode"
+        ]
+      }
+    },
+    "forwardPorts": [4000, 4001, 4002],
+    "remoteUser": "node"
+  }
+  
