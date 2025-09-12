@@ -4,7 +4,24 @@ import Producto from "./producto.js";
 import Bodega from "./bodega.js";
 
 const Inventario = sequelize.define("Inventario", {
-  cantidad: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  cantidadDisponible: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  fechaVencimientoLote: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  condicionesAlmacenamiento: {
+    type: DataTypes.STRING,
+    allowNull: true
+  }
 });
 
 Producto.hasMany(Inventario, { foreignKey: "productoId" });
