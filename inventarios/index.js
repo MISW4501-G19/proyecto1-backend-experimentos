@@ -10,12 +10,8 @@ app.use(express.json());
 app.post("/productos", async (req, res) => {
   try {
     const { sku, nombre, tipo, unidadMedida } = req.body;
-
     const existente = await Producto.findOne({ where: { sku } });
-    if (existente) {
-      return res.status(400).json({ error: "El SKU ya existe" });
-    }
-
+    if (existente) return res.status(400).json({ error: "El SKU ya existe" });
     const producto = await Producto.create({ sku, nombre, tipo, unidadMedida });
     res.status(201).json(producto);
   } catch (error) {
@@ -57,7 +53,6 @@ app.post("/inventarios", async (req, res) => {
 
     const producto = await Producto.findByPk(productoId);
     const bodega = await Bodega.findByPk(bodegaId);
-
     if (!producto) return res.status(404).json({ error: "Producto no encontrado" });
     if (!bodega) return res.status(404).json({ error: "Bodega no encontrada" });
 
@@ -77,9 +72,7 @@ app.post("/inventarios", async (req, res) => {
 
 app.get("/inventarios", async (req, res) => {
   try {
-    const inventarios = await Inventario.findAll({
-      include: [Producto, Bodega]
-    });
+    const inventarios = await Inventario.findAll({ include: [Producto, Bodega] });
     res.json(inventarios);
   } catch (error) {
     res.status(500).json({ error: error.message });
