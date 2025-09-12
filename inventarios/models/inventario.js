@@ -6,6 +6,13 @@ const Inventario = sequelize.define("Inventario", {
   lote: { type: DataTypes.STRING, allowNull: false },
   cantidadDisponible: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   fechaVencimiento: { type: DataTypes.DATE, allowNull: false }
+}, {
+  indexes: [
+    {
+      unique: true,
+      fields: ["lote", "ProductoId", "BodegaId"]
+    }
+  ]
 });
 
 export default Inventario;
