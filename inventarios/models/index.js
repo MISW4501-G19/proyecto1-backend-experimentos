@@ -3,10 +3,13 @@ import Bodega from "./bodega.js";
 import Inventario from "./inventario.js";
 
 // Asociaciones
-Producto.hasMany(Inventario, { foreignKey: "productoId" });
-Inventario.belongsTo(Producto, { foreignKey: "productoId" });
+Producto.belongsToMany(Bodega, { through: Inventario });
+Bodega.belongsToMany(Producto, { through: Inventario });
 
-Bodega.hasMany(Inventario, { foreignKey: "bodegaId" });
-Inventario.belongsTo(Bodega, { foreignKey: "bodegaId" });
+Producto.hasMany(Inventario);
+Inventario.belongsTo(Producto);
+
+Bodega.hasMany(Inventario);
+Inventario.belongsTo(Bodega);
 
 export { Producto, Bodega, Inventario };

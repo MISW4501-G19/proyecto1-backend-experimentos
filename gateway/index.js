@@ -5,12 +5,12 @@ const app = express();
 
 app.use(
   "/inventarios",
-  createProxyMiddleware({ target: "http://inventarios:4001", changeOrigin: true })
+  createProxyMiddleware({ target: "http://localhost:4001", changeOrigin: true })
 );
 
 app.use(
   "/ordenes",
-  createProxyMiddleware({ target: "http://ordenes:4002", changeOrigin: true })
+  createProxyMiddleware({ target: "http://localhost:4002", changeOrigin: true })
 );
 
 const PORT = process.env.PORT || 4000;

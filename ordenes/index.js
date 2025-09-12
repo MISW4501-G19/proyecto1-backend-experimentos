@@ -1,7 +1,6 @@
 import express from "express";
 import sequelize from "./database.js";
-import Orden from "./models/orden.js";
-import fetch from "node-fetch";
+import { Orden } from "./models/index.js";
 import { v4 as uuidv4 } from "uuid";
 
 const app = express();
@@ -27,6 +26,7 @@ app.post("/ordenes", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 app.get("/ordenes", async (req, res) => {
   try {
