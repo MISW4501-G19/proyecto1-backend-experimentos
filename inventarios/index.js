@@ -103,6 +103,42 @@ app.get("/inventarios/producto/:productoId", async (req, res) => {
   }
 });
 
+// New endpoint: update inventario quantity
+app.patch("/inventarios/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { cantidadDisponible } = req.body;
+
+    if (cantidadDisponible == null || isNaN(Number(cantidadDisponible)) || Number(cantidadDisponible) < 0) {
+      return res.status(400).json({ error: "cantidadDisponible debe ser un entero >= 0" });
+    }
+
+    const inventario = await Inventario.findByPk(id);
+    if (!inventario) return res.status(404).json({ error: "Inventario no encontrado" });
+
+    inventario.cantidadDisponible = Number(cantidadDisponible);
+    await inventario.save();
+
+    res.json(inventario);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// New endpoint: delete inventario
+app.delete("/inventarios/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inventario = await Inventario.findByPk(id);
+    if (!inventario) return res.status(404).json({ error: "Inventario no encontrado" });
+
+    await inventario.destroy();
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 4001;
 
 sequelize.sync({ force: true }).then(() => {
