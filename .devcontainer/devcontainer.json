@@ -1,7 +1,9 @@
 {
     "name": "Microservicios Backend",
-    "dockerFile": "Dockerfile",
-    "postCreateCommand": "npm install",
+    "build": {
+      "dockerfile": "Dockerfile",
+      "context": ".."
+    },
     "customizations": {
       "vscode": {
         "extensions": [
@@ -12,6 +14,7 @@
       }
     },
     "forwardPorts": [4000, 4001, 4002],
-    "remoteUser": "node"
+    "remoteUser": "vscode",
+    "postCreateCommand": "npm install"
   }
   

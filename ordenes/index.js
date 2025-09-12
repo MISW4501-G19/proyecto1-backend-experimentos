@@ -2,29 +2,39 @@ import express from "express";
 import sequelize from "./database.js";
 import Orden from "./models/orden.js";
 import fetch from "node-fetch";
+import { v4 as uuidv4 } from "uuid";
 
 const app = express();
 app.use(express.json());
 
 app.post("/ordenes", async (req, res) => {
-  const { productoId, cantidad } = req.body;
+  try {
+    const { cantidadTotal } = req.body;
 
-  const response = await fetch("http://localhost:4001/inventarios");
-  const inventarios = await response.json();
+    if (!cantidadTotal || cantidadTotal <= 0) {
+      return res.status(400).json({ error: "Cantidad total debe ser mayor a 0" });
+    }
 
-  const inventario = inventarios.find(inv => inv.productoId === productoId);
+    const orden = await Orden.create({
+      id: uuidv4(),
+      fecha: new Date(),
+      estado: "pendiente",
+      cantidadTotal
+    });
 
-  if (!inventario || inventario.cantidad < cantidad) {
-    return res.status(400).json({ error: "Stock insuficiente" });
+    res.status(201).json(orden);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-
-  const orden = await Orden.create({ productoId, cantidad, estado: "creada" });
-  res.json(orden);
 });
 
 app.get("/ordenes", async (req, res) => {
-  const ordenes = await Orden.findAll();
-  res.json(ordenes);
+  try {
+    const ordenes = await Orden.findAll();
+    res.json(ordenes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 4002;
