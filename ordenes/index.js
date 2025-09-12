@@ -19,7 +19,7 @@ app.post("/ordenes", async (req, res) => {
     }
 
     // Consultar lotes disponibles para el producto
-    const invResp = await fetch(`http://localhost:4001/inventarios/producto/${productoId}`);
+    const invResp = await fetch(`http://inventarios:4001/inventarios/producto/${productoId}`);
     if (!invResp.ok) {
       const text = await invResp.text();
       return res.status(502).json({ error: "Error consultando inventarios", detail: text });
@@ -57,7 +57,7 @@ app.post("/ordenes", async (req, res) => {
 
       // Actualizar inventario
       if (nuevoDisponible === 0) {
-        const deleteResp = await fetch(`http://localhost:4001/inventarios/${lote.id}`, {
+        const deleteResp = await fetch(`http://inventarios:4001/inventarios/${lote.id}`, {
           method: "DELETE"
         });
         if (!deleteResp.ok) {
@@ -66,7 +66,7 @@ app.post("/ordenes", async (req, res) => {
           for (const c of consumidos) {
             try {
               if (c.deleted) {
-                await fetch(`http://localhost:4001/inventarios`, {
+                await fetch(`http://inventarios:4001/inventarios`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -78,7 +78,7 @@ app.post("/ordenes", async (req, res) => {
                   })
                 });
               } else {
-                await fetch(`http://localhost:4001/inventarios/${c.inventarioId}`, {
+                await fetch(`http://inventarios:4001/inventarios/${c.inventarioId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ cantidadDisponible: c.restoreCantidad })
@@ -105,7 +105,7 @@ app.post("/ordenes", async (req, res) => {
         });
       } else {
         // Actualizar cantidad disponible
-        const patchResp = await fetch(`http://localhost:4001/inventarios/${lote.id}`, {
+        const patchResp = await fetch(`http://inventarios:4001/inventarios/${lote.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cantidadDisponible: nuevoDisponible })
@@ -116,7 +116,7 @@ app.post("/ordenes", async (req, res) => {
           for (const c of consumidos) {
             try {
               if (c.deleted) {
-                await fetch(`http://localhost:4001/inventarios`, {
+                await fetch(`http://inventarios:4001/inventarios`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -128,7 +128,7 @@ app.post("/ordenes", async (req, res) => {
                   })
                 });
               } else {
-                await fetch(`http://localhost:4001/inventarios/${c.inventarioId}`, {
+                await fetch(`http://inventarios:4001/inventarios/${c.inventarioId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ cantidadDisponible: c.restoreCantidad })
@@ -160,7 +160,7 @@ app.post("/ordenes", async (req, res) => {
       for (const c of consumidos) {
         try {
           if (c.deleted) {
-            await fetch(`http://localhost:4001/inventarios`, {
+            await fetch(`http://inventarios:4001/inventarios`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -172,7 +172,7 @@ app.post("/ordenes", async (req, res) => {
               })
             });
           } else {
-            await fetch(`http://localhost:4001/inventarios/${c.inventarioId}`, {
+            await fetch(`http://inventarios:4001/inventarios/${c.inventarioId}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ cantidadDisponible: c.restoreCantidad })
