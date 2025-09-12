@@ -1,20 +1,24 @@
 {
-    "name": "Microservicios Backend",
-    "build": {
-      "dockerfile": "Dockerfile",
-      "context": ".."
-    },
-    "customizations": {
-      "vscode": {
-        "extensions": [
-          "dbaeumer.vscode-eslint",
-          "ms-azuretools.vscode-docker",
-          "esbenp.prettier-vscode"
-        ]
-      }
-    },
-    "forwardPorts": [4000, 4001, 4002],
-    "remoteUser": "vscode",
-    "postCreateCommand": "npm install"
-  }
-  
+  "name": "Microservicios Backend",
+  "image": "mcr.microsoft.com/vscode/devcontainers/javascript-node:20",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "enableNonRootDocker": true,
+      "moby": true
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-json"
+      ]
+    }
+  },
+  "forwardPorts": [4000, 4001, 4002],
+  "postCreateCommand": "cd /workspaces/proyecto1-backend-experimentos && npm install",
+  "remoteUser": "node"
+}
