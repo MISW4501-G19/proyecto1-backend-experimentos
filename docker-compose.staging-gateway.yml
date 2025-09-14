@@ -1,0 +1,46 @@
+# Gateway Server - Staging Multi-Server Deployment
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: ../deployment/gateway/Dockerfile
+    container_name: gateway-staging
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env/staging/gateway.env
+    environment:
+      - NODE_ENV=staging
+      - SERVER_ROLE=gateway
+    networks:
+      - staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Load Balancer (if not using external LB)
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-staging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - gateway
+    networks:
+      - staging-network
+    restart: unless-stopped
+
+networks:
+  staging-network:
+    driver: bridge
+    external: true  # This network will be created externally for inter-server communication

@@ -13,7 +13,7 @@ Backend con microservicios en Node.js (Inventarios, Órdenes, Gateway)
 - Node.js 20
 - Express.js
 - Sequelize ORM
-- SQLite
+- SQLite/PostgreSQL
 - Docker & Docker Compose
 
 ## Desarrollo Local
@@ -22,11 +22,11 @@ Backend con microservicios en Node.js (Inventarios, Órdenes, Gateway)
 # Instalar dependencias
 npm install
 
-# Ejecutar en modo desarrollo
-npm run dev
+# Ejecutar en modo desarrollo híbrido (servicios AWS)
+npm run dev:hybrid
 
-# Ejecutar en modo producción
-npm run prod
+# Ejecutar en modo staging
+npm run staging
 
 # Detener servicios
 npm run stop
@@ -34,13 +34,6 @@ npm run stop
 # Ver logs
 npm run logs
 ```
-
-## Desarrollo en Codespaces
-
-1. Abre el repositorio en Codespaces
-2. El devcontainer se configurará automáticamente
-3. Ejecuta `npm run dev` para iniciar los servicios
-4. Los puertos se expondrán automáticamente
 
 ## Endpoints
 

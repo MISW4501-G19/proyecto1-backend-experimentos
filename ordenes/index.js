@@ -1,16 +1,36 @@
 import express from "express";
 import sequelize from "./database.js";
 import { Orden } from "./models/index.js";
-import { v4 as uuidv4 } from "uuid";
 import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
 
+// Health check endpoint
+app.get("/health", async (req, res) => {
+  try {
+    // Test database connection
+    await sequelize.authenticate();
+    res.status(200).json({ 
+      status: "healthy", 
+      service: "ordenes",
+      database: "connected",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: "unhealthy", 
+      service: "ordenes",
+      database: "disconnected",
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.post("/ordenes", async (req, res) => {
   try {
     const { cantidadTotal, productoId } = req.body;
-
     if (!cantidadTotal || cantidadTotal <= 0) {
       return res.status(400).json({ error: "Cantidad total debe ser mayor a 0" });
     }
@@ -18,24 +38,25 @@ app.post("/ordenes", async (req, res) => {
       return res.status(400).json({ error: "productoId es requerido" });
     }
 
+    // Get inventarios URL from environment
+    const inventariosUrl = process.env.INVENTARIOS_URL || 'http://inventarios:4001';
+
     // Consultar lotes disponibles para el producto
-    const invResp = await fetch(`http://inventarios:4001/inventarios/producto/${productoId}`);
+    const invResp = await fetch(`${inventariosUrl}/inventarios/producto/${productoId}`);
     if (!invResp.ok) {
       const text = await invResp.text();
-      return res.status(502).json({ error: "Error consultando inventarios", detail: text });
+      return res.status(400).json({ error: `Error consultando inventarios: ${text}` });
     }
     const lotes = await invResp.json();
 
     // Validar que la cantidad total solicitada sea menor o igual a la cantidad total disponible
     const disponibleTotal = lotes.reduce((acc, l) => acc + (l.cantidadDisponible || 0), 0);
     if (disponibleTotal < cantidadTotal) {
-      return res.status(400).json({ error: "Stock insuficiente", solicitado: cantidadTotal, disponible: disponibleTotal });
+      return res.status(400).json({ error: `Stock insuficiente. Solicitado: ${cantidadTotal}, Disponible: ${disponibleTotal}` });
     }
 
     // Crear orden pendiente
-    const ordenId = uuidv4();
-    let orden = await Orden.create({
-      id: ordenId,
+    const orden = await Orden.create({
       fecha: new Date(),
       estado: "pendiente",
       cantidadTotal,
@@ -57,16 +78,17 @@ app.post("/ordenes", async (req, res) => {
 
       // Actualizar inventario
       if (nuevoDisponible === 0) {
-        const deleteResp = await fetch(`http://inventarios:4001/inventarios/${lote.id}`, {
+        const deleteResp = await fetch(`${inventariosUrl}/inventarios/${lote.id}`, {
           method: "DELETE"
         });
         if (!deleteResp.ok) {
           const text = await deleteResp.text();
 
+          // Rollback consumed inventory
           for (const c of consumidos) {
             try {
               if (c.deleted) {
-                await fetch(`http://inventarios:4001/inventarios`, {
+                await fetch(`${inventariosUrl}/inventarios`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -78,7 +100,7 @@ app.post("/ordenes", async (req, res) => {
                   })
                 });
               } else {
-                await fetch(`http://inventarios:4001/inventarios/${c.inventarioId}`, {
+                await fetch(`${inventariosUrl}/inventarios/${c.inventarioId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ cantidadDisponible: c.restoreCantidad })
@@ -87,11 +109,10 @@ app.post("/ordenes", async (req, res) => {
             } catch (_) {
             }
           }
-          try {
-            orden.estado = "fallida";
-            await orden.save();
-          } catch (_) {}
-          return res.status(502).json({ error: "Error eliminando inventario", loteId: lote.id, detail: text });
+          
+          orden.estado = "fallida";
+          await orden.save();
+          return res.status(500).json({ error: `Error eliminando inventario: ${text}` });
         }
         consumidos.push({ 
           inventarioId: lote.id, 
@@ -101,11 +122,13 @@ app.post("/ordenes", async (req, res) => {
           cantidadInicialDisponible: originalDisponible,
           deleted: true,
           productoId: lote.ProductoId,
-          bodegaId: lote.BodegaId
+          bodegaId: lote.BodegaId,
+          consumido: consumir,
+          restoreCantidad: originalDisponible
         });
       } else {
         // Actualizar cantidad disponible
-        const patchResp = await fetch(`http://inventarios:4001/inventarios/${lote.id}`, {
+        const patchResp = await fetch(`${inventariosUrl}/inventarios/${lote.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cantidadDisponible: nuevoDisponible })
@@ -113,10 +136,11 @@ app.post("/ordenes", async (req, res) => {
         if (!patchResp.ok) {
           const text = await patchResp.text();
 
+          // Rollback consumed inventory
           for (const c of consumidos) {
             try {
               if (c.deleted) {
-                await fetch(`http://inventarios:4001/inventarios`, {
+                await fetch(`${inventariosUrl}/inventarios`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
@@ -128,7 +152,7 @@ app.post("/ordenes", async (req, res) => {
                   })
                 });
               } else {
-                await fetch(`http://inventarios:4001/inventarios/${c.inventarioId}`, {
+                await fetch(`${inventariosUrl}/inventarios/${c.inventarioId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ cantidadDisponible: c.restoreCantidad })
@@ -137,11 +161,10 @@ app.post("/ordenes", async (req, res) => {
             } catch (_) {
             }
           }
-          try {
-            orden.estado = "fallida";
-            await orden.save();
-          } catch (_) {}
-          return res.status(502).json({ error: "Error actualizando inventario", loteId: lote.id, detail: text });
+          
+          orden.estado = "fallida";
+          await orden.save();
+          return res.status(500).json({ error: `Error actualizando inventario: ${text}` });
         }
         consumidos.push({ 
           inventarioId: lote.id, 
@@ -149,7 +172,8 @@ app.post("/ordenes", async (req, res) => {
           cantidadAsignada: consumir, 
           fechaVencimiento: lote.fechaVencimiento, 
           cantidadInicialDisponible: originalDisponible,
-          deleted: false
+          deleted: false,
+          restoreCantidad: originalDisponible
         });
       }
       restante -= consumir;
@@ -157,10 +181,11 @@ app.post("/ordenes", async (req, res) => {
 
     // Asegurar que se haya asignado toda la cantidad
     if (restante > 0) {
+      // Rollback all consumed inventory
       for (const c of consumidos) {
         try {
           if (c.deleted) {
-            await fetch(`http://inventarios:4001/inventarios`, {
+            await fetch(`${inventariosUrl}/inventarios`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -172,15 +197,18 @@ app.post("/ordenes", async (req, res) => {
               })
             });
           } else {
-            await fetch(`http://inventarios:4001/inventarios/${c.inventarioId}`, {
+            await fetch(`${inventariosUrl}/inventarios/${c.inventarioId}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ cantidadDisponible: c.restoreCantidad })
             });
           }
-        } catch (_) {}
+        } catch (_) {
+        }
       }
-      try { orden.estado = "fallida"; await orden.save(); } catch (_) {}
+      
+      orden.estado = "fallida";
+      await orden.save();
       return res.status(500).json({ error: "Fallo de asignación parcial" });
     }
 
@@ -190,10 +218,9 @@ app.post("/ordenes", async (req, res) => {
 
     res.status(201).json({ orden, asignacion: consumidos });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
-
 
 app.get("/ordenes", async (req, res) => {
   try {
@@ -204,8 +231,47 @@ app.get("/ordenes", async (req, res) => {
   }
 });
 
+app.get("/ordenes/:id/status", async (req, res) => {
+  try {
+    const orden = await Orden.findByPk(req.params.id);
+    if (!orden) {
+      return res.status(404).json({ error: "Orden no encontrada" });
+    }
+    res.json(orden);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 4002;
 
-sequelize.sync({ force: true }).then(() => {
-  app.listen(PORT, () => console.log(`Órdenes corriendo en puerto ${PORT}`));
-});
+// Database connection with retry logic
+async function startServer() {
+  try {
+    console.log("Attempting to connect to database...");
+    await sequelize.authenticate();
+    console.log("Database connection established successfully.");
+    
+    console.log("Synchronizing database schema...");
+    await sequelize.sync({ force: true });
+    console.log("Database synchronized successfully.");
+    
+    app.listen(PORT, () => {
+      console.log(`Órdenes corriendo en puerto ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Database: ${process.env.DB_TYPE || 'sqlite'}`);
+    });
+  } catch (error) {
+    console.error("Unable to connect to the database:", error.message);
+    console.error("Database connection failed. Please check:");
+    console.error("1. RDS security group allows your IP address");
+    console.error("2. Database credentials are correct");
+    console.error("3. Database exists and is accessible");
+    console.error("4. SSL configuration is correct");
+    
+    // Exit with error code
+    process.exit(1);
+  }
+}
+
+startServer();

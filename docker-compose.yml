@@ -1,42 +1,78 @@
+# Production Docker Compose - Uses deployment Dockerfiles without volume mounts
 services:
   gateway:
     build:
       context: ./gateway
-      dockerfile: Dockerfile.dev
+      dockerfile: ../deployment/gateway/Dockerfile
     ports:
       - "4000:4000"
     depends_on:
       - inventarios
       - ordenes
-    volumes:
-      - ./gateway:/app
-      - /app/node_modules
+      - sqs
+    environment:
+      - NODE_ENV=production
+      - ORDER_CREATION_QUEUE_URL=http://sqs:9324/000000000000/order-creation
+      - AWS_REGION=us-east-1
+      - SQS_ENDPOINT=http://sqs:9324
+      - INVENTARIOS_URL=http://inventarios:4001
+      - ORDENES_URL=http://ordenes:4002
     networks:
       - backend
 
   inventarios:
     build:
       context: ./inventarios
-      dockerfile: Dockerfile.dev
+      dockerfile: ../deployment/inventarios/Dockerfile
     ports:
       - "4001:4001"
-    volumes:
-      - ./inventarios:/app
-      - /app/node_modules
+    environment:
+      - NODE_ENV=production
     networks:
       - backend
 
   ordenes:
     build:
       context: ./ordenes
-      dockerfile: Dockerfile.dev
+      dockerfile: ../deployment/ordenes/Dockerfile
     ports:
       - "4002:4002"
     depends_on:
       - inventarios
+      - sqs
+    environment:
+      - NODE_ENV=production
+      - ORDER_CREATION_QUEUE_URL=http://sqs:9324/000000000000/order-creation
+      - AWS_REGION=us-east-1
+      - SQS_ENDPOINT=http://sqs:9324
+      - INVENTARIOS_URL=http://inventarios:4001
+    networks:
+      - backend
+
+  ordenes-worker:
+    build:
+      context: ./ordenes
+      dockerfile: ../deployment/ordenes/Dockerfile
+    depends_on:
+      - inventarios
+      - sqs
+    environment:
+      - NODE_ENV=production
+      - ORDER_CREATION_QUEUE_URL=http://sqs:9324/000000000000/order-creation
+      - AWS_REGION=us-east-1
+      - SQS_ENDPOINT=http://sqs:9324
+      - INVENTARIOS_URL=http://inventarios:4001
+    command: node worker.js
+    networks:
+      - backend
+
+  sqs:
+    image: softwaremill/elasticmq-native:1.4.2
+    ports:
+      - "9324:9324"
+      - "9325:9325"
     volumes:
-      - ./ordenes:/app
-      - /app/node_modules
+      - ./sqs-config.conf:/opt/elasticmq.conf
     networks:
       - backend
 

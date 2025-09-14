@@ -1,0 +1,50 @@
+# Inventarios Server - Staging Multi-Server Deployment
+version: '3.8'
+
+services:
+  inventarios:
+    build:
+      context: ./inventarios
+      dockerfile: ../deployment/inventarios/Dockerfile
+    container_name: inventarios-staging
+    ports:
+      - "4001:4001"
+    env_file:
+      - .env/staging/inventarios.env
+    environment:
+      - NODE_ENV=staging
+      - SERVER_ROLE=inventarios
+    networks:
+      - staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Database connection retry service
+  db-connector:
+    image: postgres:15-alpine
+    container_name: db-connector-staging
+    environment:
+      - PGPASSWORD=${DB_PASSWORD}
+    command: >
+      sh -c "
+        echo 'Waiting for database connection...'
+        until pg_isready -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER}; do
+          echo 'Database is unavailable - sleeping'
+          sleep 2
+        done
+        echo 'Database is up - executing command'
+        exit 0
+      "
+    networks:
+      - staging-network
+    restart: "no"
+
+networks:
+  staging-network:
+    driver: bridge
+    external: true

@@ -1,0 +1,63 @@
+# Staging Docker Compose - Uses staging environment files
+services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: ../deployment/gateway/Dockerfile
+    ports:
+      - "4000:4000"
+    depends_on:
+      - inventarios
+      - ordenes
+    env_file:
+      - .env/staging/gateway.env
+    environment:
+      - NODE_ENV=staging
+    networks:
+      - backend
+
+  inventarios:
+    build:
+      context: ./inventarios
+      dockerfile: ../deployment/inventarios/Dockerfile
+    ports:
+      - "4001:4001"
+    env_file:
+      - .env/staging/inventarios.env
+    environment:
+      - NODE_ENV=staging
+    networks:
+      - backend
+
+  ordenes:
+    build:
+      context: ./ordenes
+      dockerfile: ../deployment/ordenes/Dockerfile
+    ports:
+      - "4002:4002"
+    depends_on:
+      - inventarios
+    env_file:
+      - .env/staging/ordenes.env
+    environment:
+      - NODE_ENV=staging
+    networks:
+      - backend
+
+  ordenes-worker:
+    build:
+      context: ./ordenes
+      dockerfile: ../deployment/ordenes/Dockerfile
+    depends_on:
+      - inventarios
+    env_file:
+      - .env/staging/ordenes.env
+    environment:
+      - NODE_ENV=staging
+    command: node worker.js
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

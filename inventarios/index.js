@@ -5,6 +5,28 @@ import { Producto, Bodega, Inventario } from "./models/index.js";
 const app = express();
 app.use(express.json());
 
+// Health check endpoint
+app.get("/health", async (req, res) => {
+  try {
+    // Test database connection
+    await sequelize.authenticate();
+    res.status(200).json({ 
+      status: "healthy", 
+      service: "inventarios",
+      database: "connected",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: "unhealthy", 
+      service: "inventarios",
+      database: "disconnected",
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.post("/productos", async (req, res) => {
   try {
     const { sku, nombre, descripcion, categoria, unidadMedida, valorUnitario, condicionesAlmacenamiento } = req.body;
@@ -60,20 +82,28 @@ app.get("/bodegas", async (req, res) => {
 app.post("/inventarios", async (req, res) => {
   try {
     const { productoId, bodegaId, lote, cantidadDisponible, fechaVencimiento } = req.body;
-
+    
+    // Verificar que el producto existe
     const producto = await Producto.findByPk(productoId);
+    if (!producto) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+    
+    // Verificar que la bodega existe
     const bodega = await Bodega.findByPk(bodegaId);
-    if (!producto) return res.status(404).json({ error: "Producto no encontrado" });
-    if (!bodega) return res.status(404).json({ error: "Bodega no encontrada" });
-
+    if (!bodega) {
+      return res.status(404).json({ error: "Bodega no encontrada" });
+    }
+    
     const inventario = await Inventario.create({
-      ProductoId: productoId,
-      BodegaId: bodegaId,
       lote,
       cantidadDisponible,
-      fechaVencimiento
+      fechaVencimiento,
+      // Map to correct field names
+      ProductoId: productoId,
+      BodegaId: bodegaId
     });
-
+    
     res.status(201).json(inventario);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -82,20 +112,8 @@ app.post("/inventarios", async (req, res) => {
 
 app.get("/inventarios", async (req, res) => {
   try {
-    const inventarios = await Inventario.findAll({ include: [{ model: Producto }, { model: Bodega }] });
-    res.json(inventarios);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// New endpoint: list inventarios by ProductoId
-app.get("/inventarios/producto/:productoId", async (req, res) => {
-  try {
-    const { productoId } = req.params;
     const inventarios = await Inventario.findAll({
-      where: { ProductoId: productoId },
-      include: [{ model: Producto }, { model: Bodega }]
+      include: [Producto, Bodega]
     });
     res.json(inventarios);
   } catch (error) {
@@ -103,35 +121,45 @@ app.get("/inventarios/producto/:productoId", async (req, res) => {
   }
 });
 
-// New endpoint: update inventario quantity
+app.get("/inventarios/producto/:productoId", async (req, res) => {
+  try {
+    const { productoId } = req.params;
+    const inventarios = await Inventario.findAll({
+      where: { ProductoId: productoId },
+      include: [Producto, Bodega]
+    });
+    res.json(inventarios);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.patch("/inventarios/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { cantidadDisponible } = req.body;
-
-    if (cantidadDisponible == null || isNaN(Number(cantidadDisponible)) || Number(cantidadDisponible) < 0) {
-      return res.status(400).json({ error: "cantidadDisponible debe ser un entero >= 0" });
-    }
-
+    
     const inventario = await Inventario.findByPk(id);
-    if (!inventario) return res.status(404).json({ error: "Inventario no encontrado" });
-
-    inventario.cantidadDisponible = Number(cantidadDisponible);
-    await inventario.save();
-
+    if (!inventario) {
+      return res.status(404).json({ error: "Inventario no encontrado" });
+    }
+    
+    await inventario.update({ cantidadDisponible });
     res.json(inventario);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// New endpoint: delete inventario
 app.delete("/inventarios/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    
     const inventario = await Inventario.findByPk(id);
-    if (!inventario) return res.status(404).json({ error: "Inventario no encontrado" });
-
+    if (!inventario) {
+      return res.status(404).json({ error: "Inventario no encontrado" });
+    }
+    
     await inventario.destroy();
     res.status(204).send();
   } catch (error) {
@@ -141,6 +169,33 @@ app.delete("/inventarios/:id", async (req, res) => {
 
 const PORT = process.env.PORT || 4001;
 
-sequelize.sync({ force: true }).then(() => {
-  app.listen(PORT, () => console.log(`Inventarios corriendo en puerto ${PORT}`));
-});
+// Database connection with retry logic
+async function startServer() {
+  try {
+    console.log("Attempting to connect to database...");
+    await sequelize.authenticate();
+    console.log("Database connection established successfully.");
+    
+    console.log("Synchronizing database schema...");
+    await sequelize.sync({ force: true });
+    console.log("Database synchronized successfully.");
+    
+    app.listen(PORT, () => {
+      console.log(`Inventarios corriendo en puerto ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Database: ${process.env.DB_TYPE || 'sqlite'}`);
+    });
+  } catch (error) {
+    console.error("Unable to connect to the database:", error.message);
+    console.error("Database connection failed. Please check:");
+    console.error("1. RDS security group allows your IP address");
+    console.error("2. Database credentials are correct");
+    console.error("3. Database exists and is accessible");
+    console.error("4. SSL configuration is correct");
+    
+    // Exit with error code
+    process.exit(1);
+  }
+}
+
+startServer();

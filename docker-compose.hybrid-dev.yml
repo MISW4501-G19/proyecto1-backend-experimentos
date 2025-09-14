@@ -1,0 +1,76 @@
+# Hybrid Development Docker Compose
+# Local microservices + External AWS services (RDS, SQS, SNS)
+services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: ../deployment/gateway/Dockerfile
+    ports:
+      - "4000:4000"
+    depends_on:
+      - inventarios
+      - ordenes
+    volumes:
+      - ./gateway:/app
+      - /app/node_modules
+    env_file:
+      - .env/hybrid-dev/gateway.env
+    environment:
+      - NODE_ENV=development
+    networks:
+      - backend
+
+  inventarios:
+    build:
+      context: ./inventarios
+      dockerfile: ../deployment/inventarios/Dockerfile
+    ports:
+      - "4001:4001"
+    volumes:
+      - ./inventarios:/app
+      - /app/node_modules
+    env_file:
+      - .env/hybrid-dev/inventarios.env
+    environment:
+      - NODE_ENV=development
+    networks:
+      - backend
+
+  ordenes:
+    build:
+      context: ./ordenes
+      dockerfile: ../deployment/ordenes/Dockerfile
+    ports:
+      - "4002:4002"
+    depends_on:
+      - inventarios
+    volumes:
+      - ./ordenes:/app
+      - /app/node_modules
+    env_file:
+      - .env/hybrid-dev/ordenes.env
+    environment:
+      - NODE_ENV=development
+    networks:
+      - backend
+
+  ordenes-worker:
+    build:
+      context: ./ordenes
+      dockerfile: ../deployment/ordenes/Dockerfile
+    depends_on:
+      - inventarios
+    volumes:
+      - ./ordenes:/app
+      - /app/node_modules
+    env_file:
+      - .env/hybrid-dev/ordenes.env
+    environment:
+      - NODE_ENV=development
+    command: node worker.js
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
