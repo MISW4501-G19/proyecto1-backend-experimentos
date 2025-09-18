@@ -1,0 +1,230 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: medysupply-staging
+  ECR_REPOSITORY_INVENTARIOS: medysupply-inventarios
+  ECR_REPOSITORY_ORDENES: medysupply-ordenes
+  ECR_REPOSITORY_GATEWAY: medysupply-gateway
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    outputs:
+      inventarios-image: ${{ steps.build-inventarios.outputs.image }}
+      ordenes-image: ${{ steps.build-ordenes.outputs.image }}
+      gateway-image: ${{ steps.build-gateway.outputs.image }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Inventarios image
+        id: build-inventarios
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_INVENTARIOS:staging -f deployment/inventarios/Dockerfile ./inventarios/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_INVENTARIOS:staging
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_INVENTARIOS:staging" >> $GITHUB_OUTPUT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+      - name: Build and push Ordenes image
+        id: build-ordenes
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_ORDENES:staging -f deployment/ordenes/Dockerfile ./ordenes/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_ORDENES:staging
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_ORDENES:staging" >> $GITHUB_OUTPUT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+      - name: Build and push Gateway image
+        id: build-gateway
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_GATEWAY:staging -f deployment/gateway/Dockerfile ./gateway/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_GATEWAY:staging
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_GATEWAY:staging" >> $GITHUB_OUTPUT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+  run-migrations:
+    name: Run Database Migrations
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update migration task definition with new image
+        run: |
+          # Update inventarios image in migration task definition
+          sed -i "s|ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/medysupply-inventarios:staging|${{ needs.build-and-push.outputs.inventarios-image }}|g" deployment/ecs/task-definitions/migration-job-staging.json
+          sed -i "s|ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/medysupply-ordenes:staging|${{ needs.build-and-push.outputs.ordenes-image }}|g" deployment/ecs/task-definitions/migration-job-staging.json
+          sed -i "s|ACCOUNT_ID|${{ secrets.AWS_ACCOUNT_ID }}|g" deployment/ecs/task-definitions/migration-job-staging.json
+
+      - name: Register migration task definition
+        run: |
+          aws ecs register-task-definition \
+            --cli-input-json file://deployment/ecs/task-definitions/migration-job-staging.json
+
+      - name: Run migration task
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition medysupply-migration-job-staging \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_IDS }}],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          
+          echo "Migration task ARN: $TASK_ARN"
+          
+          # Wait for migration task to complete
+          aws ecs wait tasks-stopped \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN
+          
+          # Check if migration was successful
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code: $EXIT_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Database migrations completed successfully"
+
+  run-seeding:
+    name: Run Database Seeding
+    needs: [build-and-push, run-migrations]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update seeding task definition with new image
+        run: |
+          # Update images in seeding task definition
+          sed -i "s|ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/medysupply-inventarios:staging|${{ needs.build-and-push.outputs.inventarios-image }}|g" deployment/ecs/task-definitions/seeding-job-staging.json
+          sed -i "s|ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/medysupply-ordenes:staging|${{ needs.build-and-push.outputs.ordenes-image }}|g" deployment/ecs/task-definitions/seeding-job-staging.json
+          sed -i "s|ACCOUNT_ID|${{ secrets.AWS_ACCOUNT_ID }}|g" deployment/ecs/task-definitions/seeding-job-staging.json
+
+      - name: Register seeding task definition
+        run: |
+          aws ecs register-task-definition \
+            --cli-input-json file://deployment/ecs/task-definitions/seeding-job-staging.json
+
+      - name: Run seeding task
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition medysupply-seeding-job-staging \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.SUBNET_IDS }}],securityGroups=[${{ secrets.SECURITY_GROUP_IDS }}],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          
+          echo "Seeding task ARN: $TASK_ARN"
+          
+          # Wait for seeding task to complete
+          aws ecs wait tasks-stopped \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN
+          
+          # Check if seeding was successful
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Seeding failed with exit code: $EXIT_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Database seeding completed successfully"
+
+  deploy-services:
+    name: Deploy Application Services
+    needs: [build-and-push, run-migrations, run-seeding]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Inventarios service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service inventarios-service \
+            --force-new-deployment
+
+      - name: Deploy Ordenes service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service ordenes-service \
+            --force-new-deployment
+
+      - name: Deploy Gateway service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service gateway-service \
+            --force-new-deployment
+
+      - name: Wait for deployments to complete
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services inventarios-service ordenes-service gateway-service
+
+      - name: Deployment completed
+        run: |
+          echo "🎉 Staging deployment completed successfully!"
+          echo "Services are now running with the latest code and database migrations."

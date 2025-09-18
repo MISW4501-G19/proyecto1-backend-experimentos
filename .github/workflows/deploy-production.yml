@@ -1,0 +1,144 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: medysupply-production
+  ECR_REPOSITORY_INVENTARIOS: medysupply-inventarios
+  ECR_REPOSITORY_ORDENES: medysupply-ordenes
+  ECR_REPOSITORY_GATEWAY: medysupply-gateway
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    outputs:
+      inventarios-image: ${{ steps.build-inventarios.outputs.image }}
+      ordenes-image: ${{ steps.build-ordenes.outputs.image }}
+      gateway-image: ${{ steps.build-gateway.outputs.image }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Inventarios image
+        id: build-inventarios
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_INVENTARIOS:production -f deployment/inventarios/Dockerfile ./inventarios/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_INVENTARIOS:production
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_INVENTARIOS:production" >> $GITHUB_OUTPUT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+      - name: Build and push Ordenes image
+        id: build-ordenes
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_ORDENES:production -f deployment/ordenes/Dockerfile ./ordenes/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_ORDENES:production
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_ORDENES:production" >> $GITHUB_OUTPUT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+      - name: Build and push Gateway image
+        id: build-gateway
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_GATEWAY:production -f deployment/gateway/Dockerfile ./gateway/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_GATEWAY:production
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_GATEWAY:production" >> $GITHUB_OUTPUT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+  production-safety-check:
+    name: Production Safety Check
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Production Safety Check
+        run: |
+          echo "🔒 PRODUCTION DEPLOYMENT SAFETY CHECK"
+          echo "====================================="
+          echo "✅ No database migrations will be run"
+          echo "✅ No database seeding will be run"
+          echo "✅ Only application code will be deployed"
+          echo "✅ Database schema must be manually managed"
+          echo ""
+          echo "⚠️  WARNING: This is a production deployment!"
+          echo "⚠️  Database changes must be handled separately"
+          echo "⚠️  Migrations should be run manually if needed"
+
+  deploy-services:
+    name: Deploy Application Services
+    needs: [build-and-push, production-safety-check]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy Inventarios service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service inventarios-service \
+            --force-new-deployment
+
+      - name: Deploy Ordenes service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service ordenes-service \
+            --force-new-deployment
+
+      - name: Deploy Gateway service
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service gateway-service \
+            --force-new-deployment
+
+      - name: Wait for deployments to complete
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services inventarios-service ordenes-service gateway-service
+
+      - name: Production deployment completed
+        run: |
+          echo "🎉 Production deployment completed successfully!"
+          echo "🔒 No database modifications were made"
+          echo "📊 Services are running with the latest code"
+          echo ""
+          echo "⚠️  Remember: Database changes must be handled separately"

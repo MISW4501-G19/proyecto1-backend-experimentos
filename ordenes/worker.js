@@ -332,9 +332,9 @@ async function pollMessages() {
 async function startWorker() {
   console.log("Starting SQS worker...");
   
-  // Initialize database
-  await sequelize.sync({ force: true });
-  console.log("Database synchronized");
+  // Initialize database (safe mode - no data loss)
+  await sequelize.sync({ force: false });
+  console.log("Database synchronized (safe mode)");
   
   // Start polling loop
   setInterval(pollMessages, 1000); // Poll every second

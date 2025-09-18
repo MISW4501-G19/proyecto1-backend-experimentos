@@ -252,21 +252,21 @@ async function startServer() {
     await sequelize.authenticate();
     console.log("Database connection established successfully.");
     
-    // Use migrations instead of sync for production safety
-    if (process.env.NODE_ENV === 'production' || process.env.RUN_MIGRATIONS === 'true') {
-      console.log("Running database migrations...");
-      const { runMigrations, runSeeders } = await import('./migrate.js');
+    // Only run migrations/seeding if explicitly requested (for development)
+    if (process.env.RUN_MIGRATIONS === 'true' && process.env.NODE_ENV !== 'production') {
+      console.log("Running database migrations (development mode)...");
+      const { runMigrations } = await import('./migrate.js');
       await runMigrations();
-      
-      if (process.env.RUN_SEEDERS === 'true') {
-        console.log("Running database seeders...");
-        await runSeeders();
-      }
-    } else {
-      // Fallback to sync for local development only
-      console.log("Synchronizing database schema (development mode)...");
-      await sequelize.sync({ force: false });
     }
+    
+    if (process.env.RUN_SEEDERS === 'true' && process.env.NODE_ENV !== 'production') {
+      console.log("Running database seeders (development mode)...");
+      const { runSeeders } = await import('./migrate.js');
+      await runSeeders();
+    }
+    
+    // For production/staging, just verify database connection
+    console.log("Database connection verified - no migrations/seeding in production");
     console.log("Database setup completed successfully.");
     
     app.listen(PORT, () => {

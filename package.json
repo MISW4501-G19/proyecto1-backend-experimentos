@@ -25,7 +25,9 @@
     "build:all": "npm run build:gateway && npm run build:inventarios && npm run build:ordenes",
     "deploy:hybrid": "npm run build:all && npm run dev:hybrid:detached",
     "deploy:staging": "npm run build:all && npm run staging:detached",
-    "deploy:production": "npm run build:all && npm run prod:detached"
+    "deploy:production": "npm run build:all && npm run prod:detached",
+    "staging:setup": "node deployment/scripts/staging/setup-staging-data.js --confirm",
+    "staging:test": "node deployment/scripts/staging/test-staging-setup.js"
   },
   "keywords": [
     "microservices",

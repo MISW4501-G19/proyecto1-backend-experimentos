@@ -60,6 +60,6 @@ npm run logs
 ## Notas
 
 - Los servicios usan SQLite para desarrollo
-- `sequelize.sync({ force: true })` recrea las tablas en cada inicio
+- Las migraciones se ejecutan automáticamente en desarrollo
 - Los inventarios se consumen por fecha de vencimiento (FIFO)
 - Las órdenes implementan patrón Saga para consistencia

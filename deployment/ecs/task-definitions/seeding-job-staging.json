@@ -1,0 +1,71 @@
+{
+  "family": "medysupply-seeding-job-staging",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "inventarios-seeding",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/medysupply-inventarios:staging",
+      "essential": true,
+      "command": ["node", "migrate.js", "seed"],
+      "environment": [
+        {"name": "NODE_ENV", "value": "production"},
+        {"name": "DB_TYPE", "value": "postgresql"},
+        {"name": "DB_HOST", "value": "medysupply-stage.coxaygocuy37.us-east-1.rds.amazonaws.com"},
+        {"name": "DB_PORT", "value": "5432"},
+        {"name": "DB_NAME", "value": "medysupply_inventory"},
+        {"name": "DB_USER", "value": "postgres"},
+        {"name": "RUN_MIGRATIONS", "value": "false"},
+        {"name": "RUN_SEEDERS", "value": "false"}
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/medysupply/staging/db-password"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/medysupply-seeding-job-staging",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "inventarios-seeding"
+        }
+      }
+    },
+    {
+      "name": "ordenes-seeding",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/medysupply-ordenes:staging",
+      "essential": true,
+      "command": ["node", "migrate.js", "seed"],
+      "environment": [
+        {"name": "NODE_ENV", "value": "production"},
+        {"name": "DB_TYPE", "value": "postgresql"},
+        {"name": "DB_HOST", "value": "medysupply-stage.coxaygocuy37.us-east-1.rds.amazonaws.com"},
+        {"name": "DB_PORT", "value": "5432"},
+        {"name": "DB_NAME", "value": "medysupply_orders"},
+        {"name": "DB_USER", "value": "postgres"},
+        {"name": "RUN_MIGRATIONS", "value": "false"},
+        {"name": "RUN_SEEDERS", "value": "false"}
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/medysupply/staging/db-password"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/medysupply-seeding-job-staging",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ordenes-seeding"
+        }
+      }
+    }
+  ]
+}
