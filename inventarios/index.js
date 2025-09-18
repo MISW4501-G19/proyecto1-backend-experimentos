@@ -176,9 +176,22 @@ async function startServer() {
     await sequelize.authenticate();
     console.log("Database connection established successfully.");
     
-    console.log("Synchronizing database schema...");
-    await sequelize.sync({ force: true });
-    console.log("Database synchronized successfully.");
+    // Use migrations instead of sync for production safety
+    if (process.env.NODE_ENV === 'production' || process.env.RUN_MIGRATIONS === 'true') {
+      console.log("Running database migrations...");
+      const { runMigrations, runSeeders } = await import('./migrate.js');
+      await runMigrations();
+      
+      if (process.env.RUN_SEEDERS === 'true') {
+        console.log("Running database seeders...");
+        await runSeeders();
+      }
+    } else {
+      // Fallback to sync for local development only
+      console.log("Synchronizing database schema (development mode)...");
+      await sequelize.sync({ force: false });
+    }
+    console.log("Database setup completed successfully.");
     
     app.listen(PORT, () => {
       console.log(`Inventarios corriendo en puerto ${PORT}`);

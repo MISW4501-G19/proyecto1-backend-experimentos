@@ -8,7 +8,11 @@
         "start": "node index.js",
         "dev": "nodemon index.js",
         "worker": "node worker.js",
-        "worker:dev": "nodemon worker.js"
+        "worker:dev": "nodemon worker.js",
+        "migrate": "node migrate.js migrate",
+        "seed": "node migrate.js seed",
+        "db:setup": "node migrate.js setup",
+        "migrate:rollback": "node migrate.js migrate:rollback"
     },
     "dependencies": {
         "@aws-sdk/client-sns": "^3.888.0",
@@ -17,6 +21,7 @@
         "node-fetch": "^3.3.2",
         "pg": "^8.16.3",
         "sequelize": "^6.37.3",
+        "umzug": "^3.8.1",
         "uuid": "^13.0.0"
     },
     "devDependencies": {
